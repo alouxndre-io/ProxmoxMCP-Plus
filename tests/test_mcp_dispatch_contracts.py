@@ -59,6 +59,10 @@ def server(tmp_path):
     ('get_cluster_log', {}, 'log_tools', 'get_cluster_log'),
     ('get_node_firewall_log', {'node': 'pve'}, 'log_tools', 'get_node_firewall_log'),
     ('get_guest_firewall_log', {'node': 'pve', 'vmid': '100'}, 'log_tools', 'get_guest_firewall_log'),
+    ('resize_vm_disk', {'node': 'pve', 'vmid': '100', 'disk': 'scsi0', 'size': '+1G'}, 'disk_tools', 'resize_vm_disk'),
+    ('move_disk', {'node': 'pve', 'vmid': '100', 'disk': 'rootfs', 'storage': 'local', 'vm_type': 'lxc'}, 'disk_tools', 'move_disk'),
+    ('delete_unused_disk', {'node': 'pve', 'vmid': '100', 'volume': 'unused0'}, 'disk_tools', 'delete_unused_disk'),
+    ('get_token_permissions', {}, 'cluster_tools', 'get_token_permissions'),
 ])
 async def test_public_schema_dispatches_to_the_selected_target(server, tool, arguments, service, method):
     server.job_store.get_job = Mock(return_value={'tool_name': 'create_snapshot'})

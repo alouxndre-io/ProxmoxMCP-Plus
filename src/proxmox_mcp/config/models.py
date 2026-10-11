@@ -151,6 +151,9 @@ class CommandPolicyConfig(BaseModel):
             "update_vm_config",
             "update_container_network",
             "execute_node_command",
+            "resize_vm_disk",
+            "move_disk",
+            "delete_unused_disk",
         ]
     )
     high_risk_require_approval_token: bool = False

@@ -463,6 +463,15 @@ class JobStore(JobPersistence):
         self.register_retry_handler("vm.stop", lambda params: self.proxmox.nodes(params["node"]).qemu(params["vmid"]).status.stop.post())
         self.register_retry_handler("vm.shutdown", lambda params: self.proxmox.nodes(params["node"]).qemu(params["vmid"]).status.shutdown.post())
         self.register_retry_handler("vm.reset", lambda params: self.proxmox.nodes(params["node"]).qemu(params["vmid"]).status.reset.post())
+        self.register_retry_handler("vm.resize", lambda params: self.proxmox.nodes(params["node"]).qemu(params["vmid"]).resize.put(disk=params["disk"], size=params["size"]))
+        self.register_retry_handler(
+            "disk.move",
+            lambda params: (
+                self.proxmox.nodes(params["node"]).lxc(params["vmid"]).move_volume.post(**params["request"])
+                if params["vm_type"] == "lxc"
+                else self.proxmox.nodes(params["node"]).qemu(params["vmid"]).move_disk.post(**params["request"])
+            ),
+        )
         self.register_retry_handler("vm.delete", lambda params: self.proxmox.nodes(params["node"]).qemu(params["vmid"]).delete())
         self.register_retry_handler("ct.start", lambda params: self.proxmox.nodes(params["node"]).lxc(params["vmid"]).status.start.post())
         self.register_retry_handler(

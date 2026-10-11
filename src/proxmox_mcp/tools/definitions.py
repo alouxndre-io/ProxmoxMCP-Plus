@@ -424,6 +424,58 @@ Example:
 rollback_snapshot node='pve' vmid='100' snapname='before-update'
 """
 
+# Disk and volume tool descriptions
+RESIZE_VM_DISK_DESC = """Grow a VM disk. Proxmox cannot shrink disks, so this cannot be undone.
+The guest partition and filesystem still need growing afterwards (growpart, resize2fs).
+
+Parameters:
+node* - Host node name
+vmid* - VM ID
+disk* - Disk key: scsiN, sataN, virtioN or ideN (see get_vm_config)
+size* - New size ('45G') or increment ('+10G'); units K, M, G, T
+
+Example:
+resize_vm_disk node='pve' vmid='107' disk='scsi0' size='+10G'
+"""
+
+MOVE_DISK_DESC = """Move a VM disk or container volume to another storage.
+Without delete_source the old volume stays attached as unusedN (remove it with delete_unused_disk).
+
+Parameters:
+node* - Host node name
+vmid* - VM or container ID
+disk* - VM disk key (scsi0, efidisk0, ...) or container volume (rootfs, mp0, ...)
+storage* - Destination storage ID (see get_storage)
+vm_type - 'qemu' or 'lxc' (default: 'qemu')
+delete_source - Destroy the source volume after the copy (default: false)
+
+Example:
+move_disk node='pve' vmid='120' disk='rootfs' storage='local-zfs' vm_type='lxc'
+"""
+
+DELETE_UNUSED_DISK_DESC = """Destroy an unused volume (unusedN) of a VM or container and remove it from the config.
+The volume data is deleted permanently.
+
+Parameters:
+node* - Host node name
+vmid* - VM or container ID
+volume* - Config key, e.g. 'unused0' (see get_vm_config / get_container_config)
+vm_type - 'qemu' or 'lxc' (default: 'qemu')
+
+Example:
+delete_unused_disk node='pve' vmid='120' volume='unused0' vm_type='lxc'
+"""
+
+GET_TOKEN_PERMISSIONS_DESC = """Show the privileges of the credentials this server uses, per ACL path.
+Use it to check what a token can really do before planning a change.
+
+Parameters:
+path - Only report this ACL path (e.g. '/vms/107'); default: all paths
+
+Example:
+get_token_permissions path='/'
+"""
+
 # ISO and Template tool descriptions
 LIST_ISOS_DESC = """List available ISO images across the cluster.
 

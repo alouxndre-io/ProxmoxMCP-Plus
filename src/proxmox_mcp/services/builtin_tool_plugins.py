@@ -20,6 +20,7 @@ from proxmox_mcp.tools.definitions import (
     DELETE_CONTAINER_DESC,
     DELETE_ISO_DESC,
     DELETE_SNAPSHOT_DESC,
+    DELETE_UNUSED_DISK_DESC,
     DELETE_VM_DESC,
     DOWNLOAD_ISO_DESC,
     EXECUTE_CONTAINER_COMMAND_DESC,
@@ -39,6 +40,7 @@ from proxmox_mcp.tools.definitions import (
     GET_NODE_SYSLOG_DESC,
     GET_STORAGE_DESC,
     GET_TASK_LOG_DESC,
+    GET_TOKEN_PERMISSIONS_DESC,
     GET_VMS_DESC,
     GET_VM_CONFIG_DESC,
     GET_VM_IP_ADDRESSES_DESC,
@@ -47,8 +49,10 @@ from proxmox_mcp.tools.definitions import (
     LIST_ISOS_DESC,
     LIST_SNAPSHOTS_DESC,
     LIST_TEMPLATES_DESC,
+    MOVE_DISK_DESC,
     POLL_JOB_DESC,
     RESET_VM_DESC,
+    RESIZE_VM_DISK_DESC,
     RESTART_CONTAINER_DESC,
     RESTORE_BACKUP_DESC,
     RETRY_JOB_DESC,
@@ -140,6 +144,16 @@ class CoreToolsPlugin(RegistryPluginBase):
         ) -> Any:
             return self._wrap_sync(server, "get_cluster_status", lambda ts: ts.cluster_tools.get_cluster_status)(
                 target=target
+            )
+
+        @server.tool_registry.tool(description=GET_TOKEN_PERMISSIONS_DESC)
+        def get_token_permissions(
+            path: Annotated[Optional[str], Field(description="ACL path to report, e.g. '/vms/107' (optional)", default=None)] = None,
+            target: Annotated[Optional[str], Field(description="Configured target name; required when multiple targets exist", default=None)] = None,
+        ) -> Any:
+            return self._wrap_sync(server, "get_token_permissions", lambda ts: ts.cluster_tools.get_token_permissions)(
+                path=path,
+                target=target,
             )
 
 
@@ -790,6 +804,67 @@ class SnapshotToolsPlugin(RegistryPluginBase):
                 node=node,
                 vmid=vmid,
                 snapname=snapname,
+                vm_type=vm_type,
+                approval_token=approval_token,
+                target=target,
+            )
+
+
+class DiskToolsPlugin(RegistryPluginBase):
+    def register(self, server: Any) -> None:
+        @server.tool_registry.tool(description=RESIZE_VM_DISK_DESC)
+        def resize_vm_disk(
+            node: Annotated[str, Field(description="Host node name (e.g. 'pve')")],
+            vmid: Annotated[str, Field(description="VM ID number (e.g. '107')", pattern=r"^\d+$")],
+            disk: Annotated[str, Field(description="Disk key, e.g. 'scsi0'", pattern=r"^(scsi|sata|virtio|ide)\d+$")],
+            size: Annotated[str, Field(description="New size '45G' or increment '+10G'", pattern=r"^\+?\d+[KMGT]$")],
+            approval_token: Annotated[Optional[str], Field(description="Optional approval token for high-risk operations", default=None)] = None,
+            target: Annotated[Optional[str], Field(description="Configured target name; required when multiple targets exist", default=None)] = None,
+        ) -> Any:
+            return self._wrap_sync(server, "resize_vm_disk", lambda ts: ts.disk_tools.resize_vm_disk, high_risk=True)(
+                node=node,
+                vmid=vmid,
+                disk=disk,
+                size=size,
+                approval_token=approval_token,
+                target=target,
+            )
+
+        @server.tool_registry.tool(description=MOVE_DISK_DESC)
+        def move_disk(
+            node: Annotated[str, Field(description="Host node name (e.g. 'pve')")],
+            vmid: Annotated[str, Field(description="VM or container ID", pattern=r"^\d+$")],
+            disk: Annotated[str, Field(description="VM disk key ('scsi0') or container volume ('rootfs', 'mp0')")],
+            storage: Annotated[str, Field(description="Destination storage ID")],
+            vm_type: Annotated[Literal["qemu", "lxc"], Field(description="Type: 'qemu' or 'lxc'")] = "qemu",
+            delete_source: Annotated[bool, Field(description="Destroy the source volume after the copy")] = False,
+            approval_token: Annotated[Optional[str], Field(description="Optional approval token for high-risk operations", default=None)] = None,
+            target: Annotated[Optional[str], Field(description="Configured target name; required when multiple targets exist", default=None)] = None,
+        ) -> Any:
+            return self._wrap_sync(server, "move_disk", lambda ts: ts.disk_tools.move_disk, high_risk=True)(
+                node=node,
+                vmid=vmid,
+                disk=disk,
+                storage=storage,
+                vm_type=vm_type,
+                delete_source=delete_source,
+                approval_token=approval_token,
+                target=target,
+            )
+
+        @server.tool_registry.tool(description=DELETE_UNUSED_DISK_DESC)
+        def delete_unused_disk(
+            node: Annotated[str, Field(description="Host node name (e.g. 'pve')")],
+            vmid: Annotated[str, Field(description="VM or container ID", pattern=r"^\d+$")],
+            volume: Annotated[str, Field(description="Config key, e.g. 'unused0'", pattern=r"^unused\d+$")],
+            vm_type: Annotated[Literal["qemu", "lxc"], Field(description="Type: 'qemu' or 'lxc'")] = "qemu",
+            approval_token: Annotated[Optional[str], Field(description="Optional approval token for high-risk operations", default=None)] = None,
+            target: Annotated[Optional[str], Field(description="Configured target name; required when multiple targets exist", default=None)] = None,
+        ) -> Any:
+            return self._wrap_sync(server, "delete_unused_disk", lambda ts: ts.disk_tools.delete_unused_disk, high_risk=True)(
+                node=node,
+                vmid=vmid,
+                volume=volume,
                 vm_type=vm_type,
                 approval_token=approval_token,
                 target=target,

@@ -10,7 +10,8 @@ This module provides tools for monitoring and managing Proxmox clusters:
 The tools provide essential information for maintaining
 cluster health and ensuring proper operation.
 """
-from typing import List
+import json
+from typing import List, Optional
 from mcp.types import TextContent as Content
 from proxmox_mcp.tools.base import ProxmoxTool
 
@@ -92,3 +93,21 @@ class ClusterTools(ProxmoxTool):
             return self._format_response(status, "cluster")
         except Exception as e:
             self._handle_error("get cluster status", e)
+
+    def get_token_permissions(self, path: Optional[str] = None) -> List[Content]:
+        """Return the privileges the configured credentials hold (GET /access/permissions).
+
+        Parameters:
+            path: Only report this ACL path (e.g. '/vms/107'); default is every path.
+
+        Returns:
+            JSON map of ACL path to the sorted list of granted privileges.
+        """
+        try:
+            params = {"path": path} if path else {}
+            result = self.proxmox.access.permissions.get(**params) or {}
+            # Values are the propagate flag; every listed privilege is granted.
+            perms = {acl: sorted(privs) for acl, privs in sorted(result.items()) if isinstance(privs, dict)}
+            return [Content(type="text", text=json.dumps(perms, indent=2))]
+        except Exception as e:
+            self._handle_error("get token permissions", e)

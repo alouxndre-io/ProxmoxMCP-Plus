@@ -16,7 +16,7 @@ _READ_ONLY_TOOLS = {
     "get_next_vmid", "get_containers",
     "get_container_config", "get_container_ip", "list_snapshots", "list_isos", "list_templates",
     "list_backups", "get_node_syslog", "get_task_log", "get_cluster_log", "get_node_firewall_log",
-    "get_guest_firewall_log",
+    "get_guest_firewall_log", "get_token_permissions",
 }
 
 

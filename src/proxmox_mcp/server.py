@@ -37,6 +37,7 @@ from proxmox_mcp.services.builtin_tool_plugins import (
     BackupToolsPlugin,
     ContainerToolsPlugin,
     CoreToolsPlugin,
+    DiskToolsPlugin,
     ImageToolsPlugin,
     JobsToolsPlugin,
     LogToolsPlugin,
@@ -51,6 +52,7 @@ from proxmox_mcp.tools.jobs import JobsTools
 from proxmox_mcp.tools.logs import LogTools
 from proxmox_mcp.tools.node import NodeTools
 from proxmox_mcp.tools.snapshots import SnapshotTools
+from proxmox_mcp.tools.disks import DiskTools
 from proxmox_mcp.tools.storage import StorageTools
 from proxmox_mcp.tools.vm import VMTools
 
@@ -181,6 +183,7 @@ class ProxmoxMCPServer:
                     target_name=name,
                 ),
                 snapshot_tools=SnapshotTools(api, metrics=self.metrics, job_store=job_store),
+                disk_tools=DiskTools(api, metrics=self.metrics, job_store=job_store),
                 iso_tools=ISOTools(api, metrics=self.metrics, job_store=job_store),
                 backup_tools=BackupTools(api, metrics=self.metrics, job_store=job_store),
                 jobs_tools=JobsTools(job_store),
@@ -200,6 +203,7 @@ class ProxmoxMCPServer:
             self.cluster_tools = ts.cluster_tools
             self.container_tools = ts.container_tools
             self.snapshot_tools = ts.snapshot_tools
+            self.disk_tools = ts.disk_tools
             self.iso_tools = ts.iso_tools
             self.backup_tools = ts.backup_tools
             self.jobs_tools = ts.jobs_tools
@@ -295,6 +299,7 @@ class ProxmoxMCPServer:
         self.tool_registry.add(VMToolsPlugin())
         self.tool_registry.add(ContainerToolsPlugin())
         self.tool_registry.add(SnapshotToolsPlugin())
+        self.tool_registry.add(DiskToolsPlugin())
         self.tool_registry.add(ImageToolsPlugin())
         self.tool_registry.add(BackupToolsPlugin())
         self.tool_registry.add(LogToolsPlugin())

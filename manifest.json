@@ -259,6 +259,22 @@
             "description": "Rollback to a specific snapshot"
         },
         {
+            "name": "resize_vm_disk",
+            "description": "Grow a VM disk (cannot shrink)"
+        },
+        {
+            "name": "move_disk",
+            "description": "Move a VM disk or container volume to another storage"
+        },
+        {
+            "name": "delete_unused_disk",
+            "description": "Destroy an unused VM or container volume"
+        },
+        {
+            "name": "get_token_permissions",
+            "description": "Show the privileges of the configured credentials"
+        },
+        {
             "name": "list_isos",
             "description": "List available ISO images"
         },

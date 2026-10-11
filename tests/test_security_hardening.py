@@ -18,6 +18,7 @@ from proxmox_mcp.services.builtin_tool_plugins import (
     JobsToolsPlugin,
     LogToolsPlugin,
     SnapshotToolsPlugin,
+    DiskToolsPlugin,
     VMToolsPlugin,
 )
 from proxmox_mcp.services.tool_catalog import BUILTIN_TOOL_NAMES
@@ -64,6 +65,7 @@ def test_manifest_declares_all_registered_tools():
         VMToolsPlugin(),
         ContainerToolsPlugin(),
         SnapshotToolsPlugin(),
+        DiskToolsPlugin(),
         ImageToolsPlugin(),
         BackupToolsPlugin(),
         LogToolsPlugin(),
