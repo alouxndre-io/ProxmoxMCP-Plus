@@ -169,6 +169,7 @@ class VMTools(ProxmoxTool):
         cdrom_device: str = "ide3",
         boot_order: Optional[str] = None,
         network_bridge: Optional[str] = None,
+        cpu: Optional[str] = None,
     ) -> List[Content]:
         """Update sizing and cloud-init settings of an existing QEMU VM.
 
@@ -181,6 +182,10 @@ class VMTools(ProxmoxTool):
         API expects the *value* of that field to be percent-encoded on top of
         the form encoding of the request (the same quirk `qm set --sshkeys`
         hides), and a raw key is rejected with "invalid format".
+
+        ``cpu`` is a CPU type name only (e.g. 'host', 'x86-64-v3', 'kvm64');
+        commas and extra options are rejected. A changed CPU type takes effect
+        only after a full stop/start of the VM, not a reboot from inside the guest.
         """
         # Approval is enforced by the target-aware tool wrapper, not the PVE API.
         _ = approval_token
@@ -223,6 +228,10 @@ class VMTools(ProxmoxTool):
             payload["searchdomain"] = searchdomain
         if tags is not None:
             payload["tags"] = tags
+        if cpu is not None:
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", cpu):
+                raise ValueError("cpu must be a CPU type name such as 'host' or 'x86-64-v3' (no commas or options)")
+            payload["cpu"] = cpu
         media = vm_media(iso_volume, cdrom_device, boot_order)
         if network_bridge is not None:
             bridge_name(network_bridge)
@@ -254,6 +263,8 @@ class VMTools(ProxmoxTool):
         notes = []
         if cloud_init_fields & payload.keys():
             notes.append("cloud-init settings are applied by the guest at its next boot")
+        if "cpu" in payload:
+            notes.append("the CPU type takes effect after a full stop and start of the VM")
         if {"memory", "cores", "sockets"} & payload.keys():
             notes.append("sizing changes on a running VM stay pending until it is restarted")
         return self._json_fmt({"vmid": vmid, "node": node, "applied": applied, "notes": notes})

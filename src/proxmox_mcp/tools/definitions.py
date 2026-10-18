@@ -104,13 +104,15 @@ ipconfig0    - cloud-init IP for net0, e.g. 'ip=dhcp' or 'ip=10.0.0.5/24,gw=10.0
 nameserver   - cloud-init DNS server(s)
 searchdomain - cloud-init DNS search domain
 tags         - Proxmox tags, semicolon-separated
+cpu          - CPU type name only (e.g. 'host', 'x86-64-v3', 'kvm64'); no commas or options
 approval_token - Approval token when required by the target's high-risk policy
 
 This tool is classified as high risk, including SSH key changes, and follows
 the selected target's command_policy.high_risk_* settings.
 
 Cloud-init fields take effect at the guest's next boot; sizing changes on a
-running VM stay pending until it restarts.
+running VM stay pending until it restarts. A changed cpu type takes effect
+only after a full stop and start of the VM.
 
 Example:
 update_vm_config node='pve' vmid='105' memory=4096 ciuser='hola' sshkeys='ssh-ed25519 AAAA... ci@host'"""

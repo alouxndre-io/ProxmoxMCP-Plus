@@ -50,6 +50,16 @@ def test_update_vm_config_sends_only_supplied_fields_and_encodes_sshkeys():
     assert any("pending" in note for note in result["notes"])
 
 
+@pytest.mark.parametrize("cpu", ["host", "x86-64-v3", "kvm64", "x86-64-v2-AES"])
+def test_update_vm_config_sends_cpu_type(cpu):
+    proxmox = Mock()
+    vm_api = proxmox.nodes.return_value.qemu.return_value
+    result = _payload(VMTools(proxmox).update_vm_config("pve", "105", cpu=cpu))
+    vm_api.config.put.assert_called_once_with(cpu=cpu)
+    assert result["applied"] == {"cpu": cpu}
+    assert any("full stop and start" in note for note in result["notes"])
+
+
 def test_update_vm_config_refuses_empty_change_set():
     tools = VMTools(Mock())
     with pytest.raises(ValueError, match="at least one setting"):
@@ -66,6 +76,10 @@ def test_update_vm_config_refuses_empty_change_set():
         ({"ciuser": "Root User"}, "valid Unix user name"),
         ({"ipconfig0": "10.0.0.5"}, "ipconfig0 must look like"),
         ({"name": "bad_name!"}, "valid DNS label"),
+        ({"cpu": "host,flags=+aes"}, "cpu must be a CPU type name"),
+        ({"cpu": "host\nboot=x"}, "cpu must be a CPU type name"),
+        ({"cpu": ""}, "cpu must be a CPU type name"),
+        ({"cpu": "cputype=host"}, "cpu must be a CPU type name"),
     ],
 )
 def test_update_vm_config_validates_inputs_before_calling_proxmox(kwargs, message):
