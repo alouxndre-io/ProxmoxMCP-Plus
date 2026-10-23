@@ -281,6 +281,11 @@ class VMToolsPlugin(RegistryPluginBase):
             boot_order: Annotated[Optional[str], Field(description="Boot devices separated by semicolons, e.g. ide3;scsi0")] = None,
             network_bridge: Annotated[Optional[str], Field(description="Change net0 bridge while preserving other NIC settings")] = None,
             cpu: Annotated[Optional[str], Field(description="CPU type name only, e.g. 'host', 'x86-64-v3', 'kvm64'; applies after full stop/start (optional)", default=None)] = None,
+            onboot: Annotated[Optional[bool], Field(description="Start the VM at host boot (optional)", default=None)] = None,
+            startup: Annotated[Optional[str], Field(description="Startup order, e.g. 'order=8' or 'order=7,up=60' (optional)", default=None)] = None,
+            agent: Annotated[Optional[str], Field(description="QEMU guest agent option, e.g. '1' or '1,fstrim_cloned_disks=1' (optional)", default=None)] = None,
+            balloon: Annotated[Optional[int], Field(description="Minimum balloon memory in MiB; 0 disables ballooning (optional)", default=None, ge=0)] = None,
+            cicustom: Annotated[Optional[str], Field(description="Cloud-init snippets, e.g. 'user=local:snippets/x.yaml' (optional)", default=None)] = None,
         ) -> Any:
             return self._wrap_sync(server, "update_vm_config", lambda ts: ts.vm_tools.update_vm_config, high_risk=True)(
                 node=node,
@@ -297,6 +302,7 @@ class VMToolsPlugin(RegistryPluginBase):
                 tags=tags,
                 approval_token=approval_token,
                 iso_volume=iso_volume, cdrom_device=cdrom_device, boot_order=boot_order, network_bridge=network_bridge, cpu=cpu,
+                onboot=onboot, startup=startup, agent=agent, balloon=balloon, cicustom=cicustom,
                 target=target,
             )
 

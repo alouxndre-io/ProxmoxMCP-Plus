@@ -60,6 +60,66 @@ def test_update_vm_config_sends_cpu_type(cpu):
     assert any("full stop and start" in note for note in result["notes"])
 
 
+@pytest.mark.parametrize(
+    "kwargs, expected",
+    [
+        ({"onboot": True}, {"onboot": 1}),
+        ({"onboot": False}, {"onboot": 0}),
+        ({"startup": "order=8"}, {"startup": "order=8"}),
+        ({"startup": "order=7,up=60"}, {"startup": "order=7,up=60"}),
+        ({"agent": "1"}, {"agent": "1"}),
+        ({"agent": "1,fstrim_cloned_disks=1"}, {"agent": "1,fstrim_cloned_disks=1"}),
+        ({"agent": "enabled=1,type=virtio"}, {"agent": "enabled=1,type=virtio"}),
+        ({"balloon": 0}, {"balloon": 0}),
+        ({"balloon": 1024}, {"balloon": 1024}),
+        ({"cicustom": "user=local:snippets/x.yaml"}, {"cicustom": "user=local:snippets/x.yaml"}),
+        ({"cicustom": "user=local:snippets/a.yaml,vendor=local-lvm:snippets/b.yml"}, {"cicustom": "user=local:snippets/a.yaml,vendor=local-lvm:snippets/b.yml"}),
+    ],
+)
+def test_update_vm_config_sends_startup_agent_balloon_cicustom(kwargs, expected):
+    proxmox = Mock()
+    vm_api = proxmox.nodes.return_value.qemu.return_value
+    result = _payload(VMTools(proxmox).update_vm_config("pve", "105", **kwargs))
+    vm_api.config.put.assert_called_once_with(**expected)
+    assert result["applied"] == expected
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"onboot": "1"}, "onboot must be a boolean"),
+        ({"onboot": 1}, "onboot must be a boolean"),
+        ({"startup": "order=8,foo=1"}, "startup must look like"),
+        ({"startup": "order=8,"}, "startup must look like"),
+        ({"startup": "order=8\nboot=x"}, "startup must look like"),
+        ({"startup": "order=x"}, "startup must look like"),
+        ({"startup": "order=1,order=2"}, "startup must look like"),
+        ({"startup": ""}, "startup must look like"),
+        ({"agent": "2"}, "agent must look like"),
+        ({"agent": "1,foo=1"}, "agent must look like"),
+        ({"agent": "1,type=evil"}, "agent must look like"),
+        ({"agent": "1,fstrim_cloned_disks=1,fstrim_cloned_disks=0"}, "agent must look like"),
+        ({"agent": "1;rm"}, "agent must look like"),
+        ({"agent": "1\nballoon=0"}, "agent must look like"),
+        ({"balloon": -1}, "balloon must be an integer"),
+        ({"balloon": True}, "balloon must be an integer"),
+        ({"balloon": "512"}, "balloon must be an integer"),
+        ({"cicustom": "user=local:snippets/../x.yaml"}, "cicustom must look like"),
+        ({"cicustom": "user=local:iso/x.yaml"}, "cicustom must look like"),
+        ({"cicustom": "user=local:snippets/x.yaml,"}, "cicustom must look like"),
+        ({"cicustom": "user=local:snippets/x.yaml,user=local:snippets/y.yaml"}, "cicustom must look like"),
+        ({"cicustom": "user=local:snippets/x y.yaml"}, "cicustom must look like"),
+        ({"cicustom": "user=local:snippets/x.yaml\nboot=x"}, "cicustom must look like"),
+        ({"cicustom": "bogus=local:snippets/x.yaml"}, "cicustom must look like"),
+    ],
+)
+def test_update_vm_config_rejects_bad_startup_agent_balloon_cicustom(kwargs, message):
+    proxmox = Mock()
+    with pytest.raises(ValueError, match=message):
+        VMTools(proxmox).update_vm_config("pve", "105", **kwargs)
+    proxmox.nodes.return_value.qemu.return_value.config.put.assert_not_called()
+
+
 def test_update_vm_config_refuses_empty_change_set():
     tools = VMTools(Mock())
     with pytest.raises(ValueError, match="at least one setting"):

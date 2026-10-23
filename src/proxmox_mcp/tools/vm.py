@@ -170,6 +170,11 @@ class VMTools(ProxmoxTool):
         boot_order: Optional[str] = None,
         network_bridge: Optional[str] = None,
         cpu: Optional[str] = None,
+        onboot: Optional[bool] = None,
+        startup: Optional[str] = None,
+        agent: Optional[str] = None,
+        balloon: Optional[int] = None,
+        cicustom: Optional[str] = None,
     ) -> List[Content]:
         """Update sizing and cloud-init settings of an existing QEMU VM.
 
@@ -186,6 +191,16 @@ class VMTools(ProxmoxTool):
         ``cpu`` is a CPU type name only (e.g. 'host', 'x86-64-v3', 'kvm64');
         commas and extra options are rejected. A changed CPU type takes effect
         only after a full stop/start of the VM, not a reboot from inside the guest.
+
+        ``onboot`` is a bool (start at host boot). ``startup`` is the boot
+        order string, only ``order=N``, ``up=N`` and ``down=N`` joined by commas
+        (e.g. 'order=8' or 'order=7,up=60'). ``agent`` is the QEMU guest agent
+        option, e.g. '1' or '1,fstrim_cloned_disks=1' (allowed keys: enabled,
+        freeze-fs-on-backup, fstrim_cloned_disks, type=isa|virtio). ``balloon``
+        is the minimum balloon memory in MiB (0 disables ballooning).
+        ``cicustom`` references cloud-init snippets as comma-separated
+        user/network/meta/vendor=<storage>:snippets/<file> entries
+        (e.g. 'user=local:snippets/x.yaml'); the snippet itself is not checked.
         """
         # Approval is enforced by the target-aware tool wrapper, not the PVE API.
         _ = approval_token
@@ -232,6 +247,37 @@ class VMTools(ProxmoxTool):
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", cpu):
                 raise ValueError("cpu must be a CPU type name such as 'host' or 'x86-64-v3' (no commas or options)")
             payload["cpu"] = cpu
+        if onboot is not None:
+            if not isinstance(onboot, bool):
+                raise ValueError("onboot must be a boolean")
+            payload["onboot"] = 1 if onboot else 0
+        if startup is not None:
+            if not re.fullmatch(r"(order|up|down)=\d{1,5}(,(order|up|down)=\d{1,5})*", startup):
+                raise ValueError("startup must look like 'order=8' or 'order=7,up=60' (order, up, down only)")
+            keys_seen = [part.split("=")[0] for part in startup.split(",")]
+            if len(set(keys_seen)) != len(keys_seen):
+                raise ValueError("startup must look like 'order=8' or 'order=7,up=60' (no repeated keys)")
+            payload["startup"] = startup
+        if agent is not None:
+            agent_opt = r"(freeze-fs-on-backup=[01]|fstrim_cloned_disks=[01]|type=(isa|virtio))"
+            if not re.fullmatch(rf"((enabled=)?[01])(,{agent_opt})*", agent):
+                raise ValueError("agent must look like '1' or '1,fstrim_cloned_disks=1' (enabled, freeze-fs-on-backup, fstrim_cloned_disks, type=isa|virtio)")
+            agent_keys = [part.split("=")[0] for part in agent.split(",")[1:]]
+            if len(set(agent_keys)) != len(agent_keys):
+                raise ValueError("agent must look like '1' or '1,fstrim_cloned_disks=1' (no repeated keys)")
+            payload["agent"] = agent
+        if balloon is not None:
+            if isinstance(balloon, bool) or not isinstance(balloon, int) or balloon < 0:
+                raise ValueError("balloon must be an integer of MiB, 0 or more (0 disables ballooning)")
+            payload["balloon"] = balloon
+        if cicustom is not None:
+            snippet = r"(user|network|meta|vendor)=[A-Za-z0-9][A-Za-z0-9_.-]*:snippets/[A-Za-z0-9][A-Za-z0-9_.-]*"
+            if not re.fullmatch(rf"{snippet}(,{snippet})*", cicustom) or ".." in cicustom:
+                raise ValueError("cicustom must look like 'user=local:snippets/x.yaml' (user, network, meta, vendor entries)")
+            custom_keys = [part.split("=")[0] for part in cicustom.split(",")]
+            if len(set(custom_keys)) != len(custom_keys):
+                raise ValueError("cicustom must look like 'user=local:snippets/x.yaml' (no repeated keys)")
+            payload["cicustom"] = cicustom
         media = vm_media(iso_volume, cdrom_device, boot_order)
         if network_bridge is not None:
             bridge_name(network_bridge)
@@ -259,7 +305,7 @@ class VMTools(ProxmoxTool):
         applied = {key: value for key, value in payload.items() if key != "digest"}
         if "sshkeys" in applied:
             applied["sshkeys"] = f"{len(keys)} key(s)"
-        cloud_init_fields = {"sshkeys", "ciuser", "ipconfig0", "nameserver", "searchdomain"}
+        cloud_init_fields = {"sshkeys", "ciuser", "ipconfig0", "nameserver", "searchdomain", "cicustom"}
         notes = []
         if cloud_init_fields & payload.keys():
             notes.append("cloud-init settings are applied by the guest at its next boot")

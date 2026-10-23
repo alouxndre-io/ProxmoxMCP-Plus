@@ -105,6 +105,11 @@ nameserver   - cloud-init DNS server(s)
 searchdomain - cloud-init DNS search domain
 tags         - Proxmox tags, semicolon-separated
 cpu          - CPU type name only (e.g. 'host', 'x86-64-v3', 'kvm64'); no commas or options
+onboot       - Start at host boot (true/false)
+startup      - Startup order, only order/up/down keys, e.g. 'order=8' or 'order=7,up=60'
+agent        - QEMU guest agent option, e.g. '1' or '1,fstrim_cloned_disks=1'
+balloon      - Minimum balloon memory in MiB (0 disables ballooning)
+cicustom     - Cloud-init snippets, e.g. 'user=local:snippets/x.yaml' (user/network/meta/vendor)
 approval_token - Approval token when required by the target's high-risk policy
 
 This tool is classified as high risk, including SSH key changes, and follows
