@@ -110,6 +110,12 @@ startup      - Startup order, only order/up/down keys, e.g. 'order=8' or 'order=
 agent        - QEMU guest agent option, e.g. '1' or '1,fstrim_cloned_disks=1'
 balloon      - Minimum balloon memory in MiB (0 disables ballooning)
 cicustom     - Cloud-init snippets, e.g. 'user=local:snippets/x.yaml' (user/network/meta/vendor)
+delete       - Settings to remove (list, or one comma-separated string), e.g. to clear a
+               cloud-init identity on a template. ONLY these keys: ciuser, cipassword, sshkeys,
+               ipconfig0, nameserver, searchdomain, cicustom, tags, startup, onboot, agent,
+               balloon, cpu. Disks, net0, boot, bios, machine, memory, cores etc. are rejected
+               (deleting them can destroy data or break the VM). No duplicates, and a key
+               cannot be both set and deleted in one call.
 approval_token - Approval token when required by the target's high-risk policy
 
 This tool is classified as high risk, including SSH key changes, and follows
@@ -117,10 +123,25 @@ the selected target's command_policy.high_risk_* settings.
 
 Cloud-init fields take effect at the guest's next boot; sizing changes on a
 running VM stay pending until it restarts. A changed cpu type takes effect
-only after a full stop and start of the VM.
+only after a full stop and start of the VM. At least one change (a set or a delete) is required.
 
 Example:
 update_vm_config node='pve' vmid='105' memory=4096 ciuser='hola' sshkeys='ssh-ed25519 AAAA... ci@host'"""
+
+CONVERT_TO_TEMPLATE_DESC = """Convert a QEMU VM into a template (POST /nodes/{node}/qemu/{vmid}/template).
+
+IRREVERSIBLE: a template cannot be started or turned back into a normal VM; the only
+way to get a usable VM again is to clone it. The VM is read first and the call is
+refused if it does not exist, is not stopped, or is already a template.
+
+Parameters:
+node* - Host node name (e.g. 'pve')
+vmid* - VM ID, digits only (e.g. '9000')
+
+This tool is classified as high risk.
+
+Example:
+convert_to_template node='pve' vmid='9000'"""
 
 GET_VM_IP_ADDRESSES_DESC = """Get a running VM's network interfaces and IP addresses via the QEMU guest agent.
 

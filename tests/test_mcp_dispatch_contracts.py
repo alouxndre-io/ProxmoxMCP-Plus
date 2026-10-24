@@ -62,6 +62,7 @@ def server(tmp_path):
     ('resize_vm_disk', {'node': 'pve', 'vmid': '100', 'disk': 'scsi0', 'size': '+1G'}, 'disk_tools', 'resize_vm_disk'),
     ('move_disk', {'node': 'pve', 'vmid': '100', 'disk': 'rootfs', 'storage': 'local', 'vm_type': 'lxc'}, 'disk_tools', 'move_disk'),
     ('delete_unused_disk', {'node': 'pve', 'vmid': '100', 'volume': 'unused0'}, 'disk_tools', 'delete_unused_disk'),
+    ('convert_to_template', {'node': 'pve', 'vmid': '100'}, 'vm_tools', 'convert_to_template'),
     ('get_token_permissions', {}, 'cluster_tools', 'get_token_permissions'),
 ])
 async def test_public_schema_dispatches_to_the_selected_target(server, tool, arguments, service, method):

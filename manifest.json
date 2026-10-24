@@ -159,6 +159,10 @@
             "description": "Reset (restart) a virtual machine"
         },
         {
+            "name": "convert_to_template",
+            "description": "Convert a stopped QEMU virtual machine into a template (irreversible, except by cloning)"
+        },
+        {
             "name": "delete_vm",
             "description": "Completely delete a virtual machine"
         },

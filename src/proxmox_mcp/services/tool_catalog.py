@@ -17,6 +17,7 @@ BUILTIN_TOOL_NAMES = frozenset(
         "get_next_vmid",
         "create_vm",
         "clone_vm",
+        "convert_to_template",
         "execute_vm_command",
         "start_vm",
         "stop_vm",

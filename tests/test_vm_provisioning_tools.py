@@ -367,3 +367,140 @@ async def test_code_mode_preserves_real_target_routing_and_approval(provisioning
     apis["strict.invalid"].nodes.return_value.qemu.return_value.config.put.assert_called_once_with(memory=4096)
     apis["readonly.invalid"].nodes.assert_not_called()
     apis["default.invalid"].nodes.assert_not_called()
+
+
+# --- update_vm_config: delete ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "delete, expected",
+    [
+        (["ciuser", "sshkeys"], "ciuser,sshkeys"),
+        ("ciuser,cipassword,cicustom", "ciuser,cipassword,cicustom"),
+        ("tags", "tags"),
+    ],
+)
+def test_update_vm_config_delete_maps_to_api_delete_field(delete, expected):
+    proxmox = Mock()
+    vm_api = proxmox.nodes.return_value.qemu.return_value
+    vm_api.config.get.return_value = {"digest": "abc"}
+    result = _payload(VMTools(proxmox).update_vm_config("pve", "9000", delete=delete))
+    vm_api.config.put.assert_called_once_with(delete=expected, digest="abc")
+    assert result["applied"]["delete"] == expected.split(",")
+
+
+def test_update_vm_config_delete_combined_with_a_set():
+    proxmox = Mock()
+    vm_api = proxmox.nodes.return_value.qemu.return_value
+    vm_api.config.get.return_value = {}
+    VMTools(proxmox).update_vm_config("pve", "9000", ciuser="hola", delete=["sshkeys"])
+    vm_api.config.put.assert_called_once_with(ciuser="hola", delete="sshkeys")
+
+
+@pytest.mark.parametrize(
+    "delete, message",
+    [
+        (["scsi0"], "not allowed"),
+        ("virtio1", "not allowed"),
+        (["sata0"], "not allowed"),
+        (["ide2"], "not allowed"),
+        (["efidisk0"], "not allowed"),
+        (["tpmstate0"], "not allowed"),
+        (["net0"], "not allowed"),
+        (["boot"], "not allowed"),
+        (["bios"], "not allowed"),
+        (["machine"], "not allowed"),
+        (["memory"], "not allowed"),
+        (["cores"], "not allowed"),
+        (["ciuser", "scsi0"], "not allowed"),
+        (["ciuser", "ciuser"], "duplicate"),
+        ("ciuser,ciuser", "duplicate"),
+        (["ciuser;scsi0"], "plain setting name"),
+        (["CIUSER"], "plain setting name"),
+        ([""], "plain setting name"),
+        ("", "plain setting name"),
+        ([], "at least one key"),
+        ([1], "list of strings"),
+        (5, "list of strings"),
+    ],
+)
+def test_update_vm_config_delete_rejects_bad_keys_before_calling_proxmox(delete, message):
+    proxmox = Mock()
+    with pytest.raises(ValueError, match=message):
+        VMTools(proxmox).update_vm_config("pve", "9000", delete=delete)
+    proxmox.nodes.assert_not_called()
+
+
+def test_update_vm_config_delete_rejects_set_and_delete_of_same_key():
+    proxmox = Mock()
+    with pytest.raises(ValueError, match="set and delete the same key"):
+        VMTools(proxmox).update_vm_config("pve", "9000", ciuser="hola", delete=["ciuser"])
+    proxmox.nodes.assert_not_called()
+
+
+def test_update_vm_config_delete_reports_missing_vm():
+    proxmox = Mock()
+    proxmox.nodes.return_value.qemu.return_value.config.get.side_effect = Exception("Configuration file does not exist")
+    with pytest.raises(ValueError, match="VM 9000 not found"):
+        VMTools(proxmox).update_vm_config("pve", "9000", delete=["tags"])
+    proxmox.nodes.return_value.qemu.return_value.config.put.assert_not_called()
+
+
+# --- convert_to_template ---------------------------------------------------
+
+
+def _template_api(config=None, status="stopped", template_flag=0):
+    proxmox = Mock()
+    vm_api = proxmox.nodes.return_value.qemu.return_value
+    vm_api.config.get.return_value = config if config is not None else {"name": "base"}
+    vm_api.status.current.get.return_value = {"status": status, "template": template_flag}
+    vm_api.template.post.return_value = "UPID:template"
+    return proxmox, vm_api
+
+
+def test_convert_to_template_posts_for_stopped_vm():
+    proxmox, vm_api = _template_api()
+    result = _payload(VMTools(proxmox).convert_to_template("pve", "9000"))
+    vm_api.template.post.assert_called_once_with()
+    assert result["task_id"] == "UPID:template"
+    assert "cannot be undone" in result["note"]
+
+
+@pytest.mark.parametrize("vmid", ["", "abc", "100/config", "100;x", "-1", "1 0", "100\n"])
+def test_convert_to_template_rejects_bad_vmid_before_calling_proxmox(vmid):
+    proxmox = Mock()
+    with pytest.raises(ValueError, match="digits"):
+        VMTools(proxmox).convert_to_template("pve", vmid)
+    proxmox.nodes.assert_not_called()
+
+
+@pytest.mark.parametrize("node", ["", "pve/../x", "pve;x", "-pve"])
+def test_convert_to_template_rejects_bad_node(node):
+    proxmox = Mock()
+    with pytest.raises(ValueError, match="node"):
+        VMTools(proxmox).convert_to_template(node, "100")
+    proxmox.nodes.assert_not_called()
+
+
+@pytest.mark.parametrize("status", ["running", "paused", "suspended"])
+def test_convert_to_template_refuses_non_stopped_vm(status):
+    proxmox, vm_api = _template_api(status=status)
+    with pytest.raises(ValueError, match="must be stopped"):
+        VMTools(proxmox).convert_to_template("pve", "100")
+    vm_api.template.post.assert_not_called()
+
+
+@pytest.mark.parametrize("config, flag", [({"template": 1}, 0), ({"name": "x"}, 1)])
+def test_convert_to_template_refuses_existing_template(config, flag):
+    proxmox, vm_api = _template_api(config=config, template_flag=flag)
+    with pytest.raises(ValueError, match="already a template"):
+        VMTools(proxmox).convert_to_template("pve", "100")
+    vm_api.template.post.assert_not_called()
+
+
+def test_convert_to_template_refuses_missing_vm():
+    proxmox, vm_api = _template_api()
+    vm_api.config.get.side_effect = Exception("Configuration file 'nodes/pve/qemu-server/100.conf' does not exist")
+    with pytest.raises(ValueError, match="VM 100 not found on node pve"):
+        VMTools(proxmox).convert_to_template("pve", "100")
+    vm_api.template.post.assert_not_called()

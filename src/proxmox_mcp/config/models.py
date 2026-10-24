@@ -154,6 +154,7 @@ class CommandPolicyConfig(BaseModel):
             "resize_vm_disk",
             "move_disk",
             "delete_unused_disk",
+            "convert_to_template",
         ]
     )
     high_risk_require_approval_token: bool = False

@@ -20,11 +20,19 @@ from proxmox_mcp.tools.guest_config import bridge_name, parse_device, vm_media
 import json
 import re
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from mcp.types import TextContent as Content
 from proxmox_mcp.models import ToolResult
 from proxmox_mcp.tools.base import ProxmoxTool, _log_safe, completeness_content
 from proxmox_mcp.tools.console.manager import VMConsoleManager
+
+
+# Keys update_vm_config may delete. Disks, net0, boot, bios, machine, memory,
+# cores and similar are deliberately absent: deleting them can destroy data.
+_DELETABLE_VM_KEYS = frozenset({
+    "ciuser", "cipassword", "sshkeys", "ipconfig0", "nameserver", "searchdomain",
+    "cicustom", "tags", "startup", "onboot", "agent", "balloon", "cpu",
+})
 
 
 def _as_dict(maybe: Any) -> Dict:
@@ -175,6 +183,7 @@ class VMTools(ProxmoxTool):
         agent: Optional[str] = None,
         balloon: Optional[int] = None,
         cicustom: Optional[str] = None,
+        delete: Optional[Union[List[str], str]] = None,
     ) -> List[Content]:
         """Update sizing and cloud-init settings of an existing QEMU VM.
 
@@ -201,6 +210,16 @@ class VMTools(ProxmoxTool):
         ``cicustom`` references cloud-init snippets as comma-separated
         user/network/meta/vendor=<storage>:snippets/<file> entries
         (e.g. 'user=local:snippets/x.yaml'); the snippet itself is not checked.
+
+        ``delete`` removes settings (API field ``delete``), e.g. to clear a
+        cloud-init identity on a template. It is a list of names or one
+        comma-separated string. Only these keys may be deleted: ciuser,
+        cipassword, sshkeys, ipconfig0, nameserver, searchdomain, cicustom,
+        tags, startup, onboot, agent, balloon, cpu. Anything else (disks,
+        net0, boot, bios, machine, memory, cores, ...) is rejected because
+        deleting it can destroy data or break the VM. Duplicates, and a key
+        that is both set and deleted in the same call, are rejected.
+        At least one change (a set or a delete) is required.
         """
         # Approval is enforced by the target-aware tool wrapper, not the PVE API.
         _ = approval_token
@@ -278,6 +297,29 @@ class VMTools(ProxmoxTool):
             if len(set(custom_keys)) != len(custom_keys):
                 raise ValueError("cicustom must look like 'user=local:snippets/x.yaml' (no repeated keys)")
             payload["cicustom"] = cicustom
+        delete_keys: List[str] = []
+        if delete is not None:
+            if isinstance(delete, str):
+                delete_keys = delete.split(",")
+            elif isinstance(delete, (list, tuple)) and all(isinstance(item, str) for item in delete):
+                delete_keys = list(delete)
+            else:
+                raise ValueError("delete must be a list of strings or one comma-separated string")
+            if not delete_keys:
+                raise ValueError("delete must name at least one key")
+            for key in delete_keys:
+                if not re.fullmatch(r"[a-z0-9]+", key):
+                    raise ValueError(f"delete key {key!r} is not a plain setting name")
+                if key not in _DELETABLE_VM_KEYS:
+                    raise ValueError(
+                        f"delete key {key!r} is not allowed: deleting it can destroy data or break the VM. "
+                        f"Deletable keys: {', '.join(sorted(_DELETABLE_VM_KEYS))}"
+                    )
+            if len(set(delete_keys)) != len(delete_keys):
+                raise ValueError("delete must not contain duplicate keys")
+            both = sorted(set(delete_keys) & payload.keys())
+            if both:
+                raise ValueError(f"cannot set and delete the same key in one call: {', '.join(both)}")
         media = vm_media(iso_volume, cdrom_device, boot_order)
         if network_bridge is not None:
             bridge_name(network_bridge)
@@ -292,8 +334,19 @@ class VMTools(ProxmoxTool):
                 payload["net0"] = ",".join(f"{key}={value}" for key, value in network.items())
             if current.get("digest"):
                 payload["digest"] = current["digest"]
-        if not payload:
+        if not payload and not delete_keys:
             raise ValueError("update_vm_config needs at least one setting to change")
+        if delete_keys:
+            if "digest" not in payload:
+                try:
+                    current = self.proxmox.nodes(node).qemu(vmid).config.get()
+                except Exception as e:
+                    if "does not exist" in str(e).lower() or "not found" in str(e).lower():
+                        raise ValueError(f"VM {vmid} not found on node {node}") from e
+                    return self._err("update_vm_config", e)
+                if current.get("digest"):
+                    payload["digest"] = current["digest"]
+            payload["delete"] = ",".join(delete_keys)
 
         try:
             self.proxmox.nodes(node).qemu(vmid).config.put(**payload)
@@ -305,6 +358,8 @@ class VMTools(ProxmoxTool):
         applied = {key: value for key, value in payload.items() if key != "digest"}
         if "sshkeys" in applied:
             applied["sshkeys"] = f"{len(keys)} key(s)"
+        if "delete" in applied:
+            applied["delete"] = delete_keys
         cloud_init_fields = {"sshkeys", "ciuser", "ipconfig0", "nameserver", "searchdomain", "cicustom"}
         notes = []
         if cloud_init_fields & payload.keys():
@@ -968,6 +1023,49 @@ Clone Configuration:
             return [Content(type="text", text=formatted), Content(type="text", text=json.dumps(exec_result))]
         except Exception as e:
             self._handle_error(f"execute command on VM {vmid}", e)
+
+    def convert_to_template(self, node: str, vmid: str, approval_token: Optional[str] = None) -> List[Content]:
+        """Convert a stopped QEMU VM into a template (POST .../qemu/{vmid}/template).
+
+        WARNING: this cannot be undone. A template cannot be started or turned
+        back into a normal VM; the only way to get a usable VM again is to
+        clone it. The VM must exist, be stopped and not already be a template.
+
+        Args:
+            node: Host node name (e.g., 'pve')
+            vmid: VM ID, digits only (e.g., '9000')
+
+        Raises:
+            ValueError: If the arguments are malformed, the VM does not exist,
+                is not stopped, or is already a template
+        """
+        _ = approval_token
+        if not isinstance(node, str) or not re.fullmatch(r"[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?", node):
+            raise ValueError("node must be a valid node name")
+        if not isinstance(vmid, str) or not re.fullmatch(r"\d{1,12}", vmid):
+            raise ValueError("vmid must be digits only")
+        try:
+            config = self.proxmox.nodes(node).qemu(vmid).config.get()
+            status = self.proxmox.nodes(node).qemu(vmid).status.current.get()
+        except Exception as e:
+            if "does not exist" in str(e).lower() or "not found" in str(e).lower():
+                raise ValueError(f"VM {vmid} not found on node {node}") from e
+            return self._err("convert_to_template", e)
+        if str(config.get("template", 0)) == "1" or str(status.get("template", 0)) == "1":
+            raise ValueError(f"VM {vmid} is already a template")
+        if status.get("status") != "stopped":
+            raise ValueError(f"VM {vmid} must be stopped before conversion (status: {status.get('status')})")
+        try:
+            task = self.proxmox.nodes(node).qemu(vmid).template.post()
+        except Exception as e:
+            return self._err("convert_to_template", e)
+        return self._json_fmt({
+            "vmid": vmid,
+            "node": node,
+            "name": config.get("name"),
+            "task_id": task,
+            "note": "converted to a template; this cannot be undone except by cloning it",
+        })
 
     def delete_vm(
         self,

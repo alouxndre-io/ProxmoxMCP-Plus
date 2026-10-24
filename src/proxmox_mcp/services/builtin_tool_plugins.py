@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from functools import partial
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Any, List, Literal, Optional, Union
 
 import anyio
 from pydantic import BaseModel, Field
@@ -21,6 +21,7 @@ from proxmox_mcp.tools.definitions import (
     DELETE_ISO_DESC,
     DELETE_SNAPSHOT_DESC,
     DELETE_UNUSED_DISK_DESC,
+    CONVERT_TO_TEMPLATE_DESC,
     DELETE_VM_DESC,
     DOWNLOAD_ISO_DESC,
     EXECUTE_CONTAINER_COMMAND_DESC,
@@ -286,6 +287,7 @@ class VMToolsPlugin(RegistryPluginBase):
             agent: Annotated[Optional[str], Field(description="QEMU guest agent option, e.g. '1' or '1,fstrim_cloned_disks=1' (optional)", default=None)] = None,
             balloon: Annotated[Optional[int], Field(description="Minimum balloon memory in MiB; 0 disables ballooning (optional)", default=None, ge=0)] = None,
             cicustom: Annotated[Optional[str], Field(description="Cloud-init snippets, e.g. 'user=local:snippets/x.yaml' (optional)", default=None)] = None,
+            delete: Annotated[Optional[Union[List[str], str]], Field(description="Settings to remove, list or comma-separated: ciuser, cipassword, sshkeys, ipconfig0, nameserver, searchdomain, cicustom, tags, startup, onboot, agent, balloon, cpu only (optional)", default=None)] = None,
         ) -> Any:
             return self._wrap_sync(server, "update_vm_config", lambda ts: ts.vm_tools.update_vm_config, high_risk=True)(
                 node=node,
@@ -302,7 +304,7 @@ class VMToolsPlugin(RegistryPluginBase):
                 tags=tags,
                 approval_token=approval_token,
                 iso_volume=iso_volume, cdrom_device=cdrom_device, boot_order=boot_order, network_bridge=network_bridge, cpu=cpu,
-                onboot=onboot, startup=startup, agent=agent, balloon=balloon, cicustom=cicustom,
+                onboot=onboot, startup=startup, agent=agent, balloon=balloon, cicustom=cicustom, delete=delete,
                 target=target,
             )
 
@@ -425,6 +427,20 @@ class VMToolsPlugin(RegistryPluginBase):
             target: Annotated[Optional[str], Field(description="Configured target name; required when multiple targets exist", default=None)] = None,
         ) -> Any:
             return self._wrap_sync(server, "reset_vm", lambda ts: ts.vm_tools.reset_vm)(node, vmid, target=target)
+
+        @server.tool_registry.tool(description=CONVERT_TO_TEMPLATE_DESC)
+        def convert_to_template(
+            node: Annotated[str, Field(description="Host node name (e.g. 'pve')")],
+            vmid: Annotated[str, Field(description="VM ID number (e.g. '9000')", pattern=r"^\d+$")],
+            approval_token: Annotated[Optional[str], Field(description="Optional approval token for high-risk operations", default=None)] = None,
+            target: Annotated[Optional[str], Field(description="Configured target name; required when multiple targets exist", default=None)] = None,
+        ) -> Any:
+            return self._wrap_sync(server, "convert_to_template", lambda ts: ts.vm_tools.convert_to_template, high_risk=True)(
+                node=node,
+                vmid=vmid,
+                approval_token=approval_token,
+                target=target,
+            )
 
         @server.tool_registry.tool(description=DELETE_VM_DESC)
         def delete_vm(
